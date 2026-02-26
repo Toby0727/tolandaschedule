@@ -1,7 +1,14 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { createHash } from "node:crypto";
 
-const EXTRACTION_MODEL = process.env.ANTHROPIC_EXTRACT_MODEL || "claude-3-5-haiku-latest";
+const EXTRACTION_MODELS = (
+  process.env.ANTHROPIC_EXTRACT_MODELS ||
+  process.env.ANTHROPIC_EXTRACT_MODEL ||
+  "claude-haiku-4-5-20251001"
+)
+  .split(",")
+  .map((model) => model.trim())
+  .filter(Boolean);
 const EXTRACTION_MAX_TOKENS = Number(process.env.ANTHROPIC_EXTRACT_MAX_TOKENS || 1600);
 const CACHE_TTL_MS = 15 * 60 * 1000;
 const CACHE_MAX_ITEMS = 20;
@@ -116,6 +123,12 @@ function parseModelJson(text) {
   throw lastError || new Error("Unable to parse model response as JSON.");
 }
 
+function isModelNotFoundError(error) {
+  const type = error?.error?.type || error?.type || "";
+  const message = error?.error?.message || error?.message || "";
+  return type === "not_found_error" || /model\s*:/i.test(message);
+}
+
 export async function POST(req) {
   try {
     const { base64 } = await req.json();
@@ -136,29 +149,52 @@ export async function POST(req) {
 
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    const response = await client.messages.create({
-      model: EXTRACTION_MODEL,
-      max_tokens: EXTRACTION_MAX_TOKENS,
-      messages: [
-        {
-          role: "user",
-          content: [
+    let response;
+    let lastError;
+
+    for (const model of EXTRACTION_MODELS) {
+      try {
+        response = await client.messages.create({
+          model,
+          max_tokens: EXTRACTION_MAX_TOKENS,
+          messages: [
             {
-              type: "document",
-              source: {
-                type: "base64",
-                media_type: "application/pdf",
-                data: base64,
-              },
-            },
-            {
-              type: "text",
-              text: EXTRACTION_PROMPT,
+              role: "user",
+              content: [
+                {
+                  type: "document",
+                  source: {
+                    type: "base64",
+                    media_type: "application/pdf",
+                    data: base64,
+                  },
+                },
+                {
+                  type: "text",
+                  text: EXTRACTION_PROMPT,
+                },
+              ],
             },
           ],
+        });
+        break;
+      } catch (error) {
+        lastError = error;
+        if (!isModelNotFoundError(error)) {
+          throw error;
+        }
+      }
+    }
+
+    if (!response) {
+      return Response.json(
+        {
+          error: `No available Anthropic model found. Tried: ${EXTRACTION_MODELS.join(", ")}. Set ANTHROPIC_EXTRACT_MODEL or ANTHROPIC_EXTRACT_MODELS to a model available in your Anthropic account.`,
+          details: lastError?.message || "Model not found.",
         },
-      ],
-    });
+        { status: 500 }
+      );
+    }
 
     const text = response.content.find((block) => block.type === "text")?.text || "";
     const parsed = parseModelJson(text);
