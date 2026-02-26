@@ -63,34 +63,55 @@ function Badge({ cat }) {
 // ─── Upload ──────────────────────────────────────────────────────────────────
 
 function UploadStep({ onExtract }) {
-  const [file, setFile]       = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState(null);
-  const [drag, setDrag]       = useState(false);
+  const [files, setFiles]       = useState([]);
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState(null);
+  const [drag, setDrag]         = useState(false);
+  const [progress, setProgress] = useState("");
 
-  const pick = (f) => {
-    if (f?.type === "application/pdf") { setFile(f); setError(null); }
-    else setError("Please upload a PDF.");
+  const pick = (newFiles) => {
+    const pdfs = Array.from(newFiles).filter(f => f.type === "application/pdf");
+    if (pdfs.length === 0) { setError("Please upload PDF files only."); return; }
+    setFiles(prev => [...prev, ...pdfs]);
+    setError(null);
+  };
+
+  const removeFile = (index) => {
+    setFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   const run = async () => {
-    if (!file) return;
+    if (!files.length) return;
     setLoading(true); setError(null);
     try {
-      const buf  = await file.arrayBuffer();
-      const bytes = new Uint8Array(buf);
-      let bin = ""; for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-      const b64 = btoa(bin);
+      const allEvents = [];
+      let mergedData = null;
 
-      const res  = await fetch("/api/extract", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ base64: b64 }) });
-      const text = await res.text();
-      const json = text ? JSON.parse(text) : null;
-      if (!res.ok || json.error) throw new Error(json.error || "API error");
-      onExtract(json.data);
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        setProgress(`Extracting ${i + 1} of ${files.length}: ${file.name}…`);
+
+        const buf = await file.arrayBuffer();
+        const bytes = new Uint8Array(buf);
+        let bin = ""; for (let j = 0; j < bytes.length; j++) bin += String.fromCharCode(bytes[j]);
+        const b64 = btoa(bin);
+
+        const res = await fetch("/api/extract", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ base64: b64 }) });
+        const text = await res.text();
+        const json = text ? JSON.parse(text) : null;
+        if (!res.ok || json.error) throw new Error(json.error || "API error");
+
+        if (!mergedData) mergedData = { ...json.data };
+        const offsetEvents = json.data.events.map((e, idx) => ({ ...e, id: allEvents.length + idx + 1, _source: file.name }));
+        allEvents.push(...offsetEvents);
+      }
+
+      onExtract({ ...mergedData, events: allEvents });
     } catch (e) {
       setError("Extraction failed: " + e.message);
     } finally {
       setLoading(false);
+      setProgress("");
     }
   };
 
@@ -109,7 +130,7 @@ function UploadStep({ onExtract }) {
             Builder
           </h1>
           <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:15, color:"#666", marginTop:20, lineHeight:1.65, maxWidth:400 }}>
-            Upload your course syllabus and instantly get a full semester schedule — organized by week, month, and deadline.
+            Upload one or more course syllabi and instantly get a full semester schedule — organized by week, month, and deadline.
           </p>
         </div>
 
@@ -117,22 +138,38 @@ function UploadStep({ onExtract }) {
         <div
           onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
           onDragLeave={() => setDrag(false)}
-          onDrop={(e) => { e.preventDefault(); setDrag(false); pick(e.dataTransfer.files[0]); }}
+          onDrop={(e) => { e.preventDefault(); setDrag(false); pick(e.dataTransfer.files); }}
           onClick={() => document.getElementById("fi").click()}
           style={{
-            border:`2px dashed ${drag ? "#111" : file ? "#1a5c3a" : "#d8d8d8"}`,
+            border:`2px dashed ${drag ? "#111" : files.length ? "#1a5c3a" : "#d8d8d8"}`,
             borderRadius:6, padding:"44px 32px", textAlign:"center", cursor:"pointer",
-            background: drag ? "#f5f5f5" : file ? "#f0f7f2" : "#fafafa",
-            transition:"all 0.2s", marginBottom:20,
+            background: drag ? "#f5f5f5" : files.length ? "#f0f7f2" : "#fafafa",
+            transition:"all 0.2s", marginBottom: files.length ? 12 : 20,
           }}
         >
-          <input id="fi" type="file" accept=".pdf" style={{ display:"none" }} onChange={e => pick(e.target.files[0])} />
-          <div style={{ fontSize:36, marginBottom:14 }}>{file ? "📄" : "☁"}</div>
-          <div style={{ fontFamily:"'DM Sans',sans-serif", fontSize:15, color: file ? "#1a5c3a" : "#444", fontWeight:600 }}>
-            {file ? file.name : "Drop your syllabus PDF here"}
+          <input id="fi" type="file" accept=".pdf" multiple style={{ display:"none" }} onChange={e => pick(e.target.files)} />
+          <div style={{ fontSize:36, marginBottom:14 }}>{files.length ? "📄" : "☁"}</div>
+          <div style={{ fontFamily:"'DM Sans',sans-serif", fontSize:15, color: files.length ? "#1a5c3a" : "#444", fontWeight:600 }}>
+            {files.length ? `${files.length} PDF${files.length > 1 ? "s" : ""} selected` : "Drop your syllabus PDFs here"}
           </div>
-          {!file && <div style={{ fontFamily:"'DM Sans',sans-serif", fontSize:13, color:"#bbb", marginTop:6 }}>or click to browse</div>}
+          {!files.length && <div style={{ fontFamily:"'DM Sans',sans-serif", fontSize:13, color:"#bbb", marginTop:6 }}>or click to browse — multiple files supported</div>}
+          {files.length > 0 && <div style={{ fontFamily:"'DM Sans',sans-serif", fontSize:12, color:"#aaa", marginTop:6 }}>Click to add more</div>}
         </div>
+
+        {/* File list */}
+        {files.length > 0 && (
+          <div style={{ marginBottom:20, border:"1px solid #e8e8e8", borderRadius:6, overflow:"hidden" }}>
+            {files.map((f, i) => (
+              <div key={i} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 14px", borderBottom: i < files.length-1 ? "1px solid #f4f4f4" : "none", background: i%2===0 ? "#fff" : "#fafafa" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                  <span style={{ fontSize:16 }}>📄</span>
+                  <span style={{ fontFamily:"'DM Sans',sans-serif", fontSize:13, color:"#333", maxWidth:320, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.name}</span>
+                </div>
+                <button onClick={(e) => { e.stopPropagation(); removeFile(i); }} style={{ background:"none", border:"none", cursor:"pointer", color:"#cc4444", fontSize:14, padding:"0 4px" }}>✕</button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {error && (
           <div style={{ background:"#fff0f0", border:"1px solid #f7c5c5", borderRadius:4, padding:"12px 16px", fontFamily:"'DM Sans',sans-serif", fontSize:13, color:"#8b1a1a", marginBottom:16 }}>
@@ -142,17 +179,17 @@ function UploadStep({ onExtract }) {
 
         <button
           onClick={run}
-          disabled={!file || loading}
+          disabled={!files.length || loading}
           style={{
             width:"100%", padding:"15px 24px",
-            background: file && !loading ? "#111" : "#e5e5e5",
-            color: file && !loading ? "#fff" : "#aaa",
+            background: files.length && !loading ? "#111" : "#e5e5e5",
+            color: files.length && !loading ? "#fff" : "#aaa",
             border:"none", borderRadius:4, fontFamily:"'DM Sans',sans-serif",
             fontSize:15, fontWeight:700, letterSpacing:"0.04em",
-            cursor: file && !loading ? "pointer" : "not-allowed", transition:"background 0.2s",
+            cursor: files.length && !loading ? "pointer" : "not-allowed", transition:"background 0.2s",
           }}
         >
-          {loading ? "Extracting schedule…" : "Extract Schedule →"}
+          {loading ? progress || "Extracting schedule…" : `Extract Schedule${files.length > 1 ? ` (${files.length} files)` : ""} →`}
         </button>
 
         {/* Demo */}
@@ -166,19 +203,8 @@ function UploadStep({ onExtract }) {
           <div style={{ marginTop:12 }}>
             <button
               type="button"
-              onClick={() => {
-                window.location.href = "/configuration/secret";
-              }}
-              style={{
-                background:"#111",
-                color:"#fff",
-                border:"none",
-                borderRadius:4,
-                cursor:"pointer",
-                fontFamily:"'DM Sans',sans-serif",
-                fontSize:12,
-                padding:"8px 14px",
-              }}
+              onClick={() => { window.location.href = "/configuration/secret"; }}
+              style={{ background:"#111", color:"#fff", border:"none", borderRadius:4, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", fontSize:12, padding:"8px 14px" }}
             >
               Secret Button
             </button>
@@ -246,7 +272,7 @@ function ReviewStep({ data, onConfirm, onBack }) {
         <table style={{ width:"100%", borderCollapse:"collapse", fontFamily:"'DM Sans',sans-serif", fontSize:13 }}>
           <thead>
             <tr style={{ background:"#f7f7f7", borderBottom:"1px solid #e8e8e8" }}>
-              {["Category","Title","Date","Time","Location","Notes",""].map(h => (
+              {["Category","Title","Date","Time","Location","Notes","Source",""].map(h => (
                 <th key={h} style={{ padding:"10px 14px", textAlign:"left", fontWeight:700, color:"#666", fontSize:11, letterSpacing:"0.08em", textTransform:"uppercase", whiteSpace:"nowrap" }}>{h}</th>
               ))}
             </tr>
@@ -280,6 +306,7 @@ function ReviewStep({ data, onConfirm, onBack }) {
                   </td>
                   <td style={{ padding:"10px 14px", color:"#888" }}>{ev.location || "—"}</td>
                   <td style={{ padding:"10px 14px", color:"#aaa", maxWidth:180, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{ev.notes || "—"}</td>
+                  <td style={{ padding:"10px 14px", color:"#bbb", fontSize:11, maxWidth:140, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{ev._source || "—"}</td>
                   <td style={{ padding:"10px 14px", whiteSpace:"nowrap" }}>
                     <button onClick={() => setEditing(isEd ? null : ev.id)} style={{ background:"none", border:"none", cursor:"pointer", color:"#888", fontSize:12, marginRight:8 }}>{isEd ? "✓ Done" : "Edit"}</button>
                     <button onClick={() => del(ev.id)} style={{ background:"none", border:"none", cursor:"pointer", color:"#cc4444", fontSize:12 }}>✕</button>
@@ -329,25 +356,45 @@ function MonthCal({ year, month, events }) {
         ))}
         {cells.map((day, i) => {
           const evs = day ? (byDay[day] || []) : [];
+          // Sort exams to top
+          const sorted = [...evs].sort((a, b) => {
+            if (a.category === "exam" && b.category !== "exam") return -1;
+            if (b.category === "exam" && a.category !== "exam") return 1;
+            return 0;
+          });
+          const hasExam = evs.some(e => e.category === "exam");
           return (
             <div key={i} style={{
               minHeight:72, padding:6,
-              background: day ? "#fff" : "#fafafa",
+              background: hasExam ? "#fff8f8" : day ? "#fff" : "#fafafa",
               borderRight: (i+1)%7===0 ? "none" : "1px solid #f0f0f0",
               borderBottom: i < cells.length-7 ? "1px solid #f0f0f0" : "none",
             }}>
               {day && (
                 <>
-                  <div style={{ fontFamily:"'DM Sans',sans-serif", fontSize:12, color: evs.length ? "#111" : "#ccc", fontWeight: evs.length ? 700 : 400, marginBottom:3 }}>{day}</div>
-                  {evs.slice(0,2).map((ev,j) => {
+                  <div style={{ fontFamily:"'DM Sans',sans-serif", fontSize:12, color: hasExam ? "#8b1a1a" : evs.length ? "#111" : "#ccc", fontWeight: evs.length ? 700 : 400, marginBottom:3 }}>{day}</div>
+                  {sorted.slice(0,3).map((ev,j) => {
                     const c = CAT[ev.category] || CAT.other;
                     return (
-                      <div key={j} title={ev.title} style={{ background:c.bg, color:"#fff", fontFamily:"'DM Sans',sans-serif", fontSize:10, padding:"2px 5px", borderRadius:2, marginBottom:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", lineHeight:"1.4" }}>
-                        {ev.title}
+                      <div key={j} title={ev.title} style={{
+                        background: c.bg,
+                        color:"#fff",
+                        fontFamily:"'DM Sans',sans-serif",
+                        fontSize:10,
+                        padding:"2px 5px",
+                        borderRadius:2,
+                        marginBottom:2,
+                        overflow:"hidden",
+                        textOverflow:"ellipsis",
+                        whiteSpace:"nowrap",
+                        lineHeight:"1.4",
+                        boxShadow: ev.category === "exam" ? "0 0 0 1px #8b1a1a" : "none",
+                      }}>
+                        {ev.category === "exam" ? "⚠ " : ""}{ev.title}
                       </div>
                     );
                   })}
-                  {evs.length > 2 && <div style={{ fontFamily:"'DM Sans',sans-serif", fontSize:10, color:"#aaa" }}>+{evs.length-2} more</div>}
+                  {sorted.length > 3 && <div style={{ fontFamily:"'DM Sans',sans-serif", fontSize:10, color:"#aaa" }}>+{sorted.length-3} more</div>}
                 </>
               )}
             </div>
@@ -417,7 +464,7 @@ function DeadlineTable({ events }) {
         <table style={{ width:"100%", borderCollapse:"collapse", fontFamily:"'DM Sans',sans-serif", fontSize:13 }}>
           <thead>
             <tr style={{ background:"#111" }}>
-              {["Date","Day","Category","Event","Time","Location"].map(h => (
+              {["Date","Day","Category","Event","Time","Location","Source"].map(h => (
                 <th key={h} style={{ padding:"11px 16px", textAlign:"left", fontWeight:700, color:"#fff", fontSize:11, letterSpacing:"0.08em", textTransform:"uppercase", whiteSpace:"nowrap" }}>{h}</th>
               ))}
             </tr>
@@ -425,14 +472,16 @@ function DeadlineTable({ events }) {
           <tbody>
             {dated.map((ev, i) => {
               const d = parseDate(ev.date);
+              const isExam = ev.category === "exam";
               return (
-                <tr key={ev.id} style={{ borderBottom:"1px solid #f4f4f4", background: i%2===0 ? "#fff" : "#fafafa" }}>
-                  <td style={{ padding:"11px 16px", color:"#333", fontWeight:600, whiteSpace:"nowrap" }}>{ev.date}</td>
+                <tr key={ev.id} style={{ borderBottom:"1px solid #f4f4f4", background: isExam ? "#fff5f5" : i%2===0 ? "#fff" : "#fafafa" }}>
+                  <td style={{ padding:"11px 16px", color: isExam ? "#8b1a1a" : "#333", fontWeight:600, whiteSpace:"nowrap" }}>{ev.date}</td>
                   <td style={{ padding:"11px 16px", color:"#888", whiteSpace:"nowrap" }}>{d ? DAY_FULL[d.getDay()] : ""}</td>
                   <td style={{ padding:"11px 16px" }}><Badge cat={ev.category} /></td>
-                  <td style={{ padding:"11px 16px", color:"#222", fontWeight:500 }}>{ev.title}</td>
+                  <td style={{ padding:"11px 16px", color: isExam ? "#8b1a1a" : "#222", fontWeight: isExam ? 700 : 500 }}>{isExam ? "⚠ " : ""}{ev.title}</td>
                   <td style={{ padding:"11px 16px", color:"#666", whiteSpace:"nowrap" }}>{ev.time_start ? fmt12(ev.time_start) : "—"}</td>
                   <td style={{ padding:"11px 16px", color:"#999" }}>{ev.location || "—"}</td>
+                  <td style={{ padding:"11px 16px", color:"#bbb", fontSize:11 }}>{ev._source || "—"}</td>
                 </tr>
               );
             })}
@@ -464,6 +513,8 @@ function ScheduleView({ data, onBack }) {
     { id:"deadlines",label:"All Deadlines" },
   ];
 
+  const examCount = data.events.filter(e => e.category === "exam" && e.date).length;
+
   return (
     <div style={{ maxWidth:1060, margin:"0 auto", padding:"40px 24px" }}>
 
@@ -478,6 +529,7 @@ function ScheduleView({ data, onBack }) {
             {data.instructor       && <span>👤 {data.instructor}</span>}
             {data.semester         && <span>📅 {data.semester}</span>}
             {data.semester_start && data.semester_end && <span>🗓 {data.semester_start} – {data.semester_end}</span>}
+            {examCount > 0         && <span style={{ color:"#8b1a1a", fontWeight:700 }}>⚠ {examCount} exam{examCount > 1 ? "s" : ""}</span>}
           </div>
         </div>
         {/* Legend */}
@@ -537,20 +589,9 @@ export default function Home() {
         <div style={{ display:"flex", gap:8, alignItems:"center" }}>
           <button
             type="button"
-            onClick={() => {
-              window.location.href = "/configuration/secret";
-            }}
+            onClick={() => { window.location.href = "/configuration/secret"; }}
             aria-label="secret message"
-            style={{
-              border: "1px solid #e8e8e8",
-              borderRadius: 4,
-              background: "#fff",
-              color: "#888",
-              fontFamily: "'DM Sans',sans-serif",
-              fontSize: 12,
-              padding: "6px 14px",
-              cursor: "pointer",
-            }}
+            style={{ border:"1px solid #e8e8e8", borderRadius:4, background:"#fff", color:"#888", fontFamily:"'DM Sans',sans-serif", fontSize:12, padding:"6px 14px", cursor:"pointer" }}
           >
             Secret Button
           </button>
