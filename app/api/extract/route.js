@@ -9,7 +9,7 @@ const EXTRACTION_MODELS = (
   .split(",")
   .map((model) => model.trim())
   .filter(Boolean);
-const EXTRACTION_MAX_TOKENS = Number(process.env.ANTHROPIC_EXTRACT_MAX_TOKENS || 1600);
+const EXTRACTION_MAX_TOKENS = Number(process.env.ANTHROPIC_EXTRACT_MAX_TOKENS || 8096);
 const CACHE_TTL_MS = 15 * 60 * 1000;
 const CACHE_MAX_ITEMS = 20;
 const extractionCache = new Map();
