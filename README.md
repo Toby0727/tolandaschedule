@@ -1,31 +1,36 @@
 # Syllabus Schedule Builder
 
-Streamlit app that:
+Upload a course syllabus PDF and get a full semester schedule — organized by week, month, and deadline.
 
-1. Accepts a syllabus PDF upload.
-2. Sends the PDF to Claude (`claude-sonnet-4-6`) for structured schedule extraction.
-3. Lets the user review and edit extracted events.
-4. Generates a downloadable semester schedule PDF with:
-   - Weekly recurring schedule grid
-   - Month-by-month calendar pages
-   - Chronological table of non-recurring events
+## Stack
+- Next.js 14 (App Router)
+- Anthropic Claude API
+- No other dependencies
 
-## Setup
+## Deploy to Vercel in 3 steps
 
-1. Install dependencies:
+### 1. Push to GitHub
+```bash
+git init
+git add .
+git commit -m "initial commit"
+gh repo create syllabus-builder --public --push
+```
 
-   ```bash
-   pip install -r requirements.txt
-   ```
+### 2. Import to Vercel
+Go to [vercel.com/new](https://vercel.com/new), import your GitHub repo, and click Deploy.
 
-2. Add Streamlit secret in `.streamlit/secrets.toml`:
+### 3. Add your API key
+In your Vercel project → **Settings → Environment Variables**, add:
+```
+ANTHROPIC_API_KEY = sk-ant-...
+```
+Then redeploy.
 
-   ```toml
-   ANTHROPIC_API_KEY = "your_api_key_here"
-   ```
-
-3. Run the app:
-
-   ```bash
-   streamlit run streamlit_app.py
-   ```
+## Run locally
+```bash
+npm install
+echo 'ANTHROPIC_API_KEY=sk-ant-...' > .env.local
+npm run dev
+```
+Open http://localhost:3000
