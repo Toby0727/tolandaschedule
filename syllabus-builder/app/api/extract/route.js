@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { createHash } from "node:crypto";
 
-const EXTRACTION_MODEL = process.env.ANTHROPIC_EXTRACT_MODEL || "claude-3-5-haiku-latest";
+const EXTRACTION_MODEL = process.env.ANTHROPIC_EXTRACT_MODEL || "claude-3-5-haiku-20241022";
 const EXTRACTION_MAX_TOKENS = Number(process.env.ANTHROPIC_EXTRACT_MAX_TOKENS || 1600);
 const CACHE_TTL_MS = 15 * 60 * 1000;
 const CACHE_MAX_ITEMS = 20;
