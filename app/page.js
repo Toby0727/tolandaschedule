@@ -83,7 +83,8 @@ function UploadStep({ onExtract }) {
       const b64 = btoa(bin);
 
       const res  = await fetch("/api/extract", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ base64: b64 }) });
-      const json = await res.json();
+      const text = await res.text();
+      const json = text ? JSON.parse(text) : null;
       if (!res.ok || json.error) throw new Error(json.error || "API error");
       onExtract(json.data);
     } catch (e) {
