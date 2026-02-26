@@ -521,19 +521,17 @@ export default function Home() {
             }}
             aria-label="secret message"
             style={{
-              width: 16,
-              height: 16,
-              borderRadius: "50%",
-              border: "1px solid #d2d2d2",
+              border: "1px solid #e8e8e8",
+              borderRadius: 4,
               background: "#fff",
-              color: "#c8c8c8",
-              fontSize: 10,
-              lineHeight: 1,
-              padding: 0,
+              color: "#888",
+              fontFamily: "'DM Sans',sans-serif",
+              fontSize: 12,
+              padding: "6px 14px",
               cursor: "pointer",
             }}
           >
-            ·
+            Secret Button
           </button>
           <a
             href="/configuration"
