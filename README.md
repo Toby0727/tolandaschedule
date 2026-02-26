@@ -1,19 +1,31 @@
-# 🎈 Blank app template
+# Syllabus Schedule Builder
 
-A simple Streamlit app template for you to modify!
+Streamlit app that:
 
-[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://blank-app-template.streamlit.app/)
+1. Accepts a syllabus PDF upload.
+2. Sends the PDF to Claude (`claude-sonnet-4-6`) for structured schedule extraction.
+3. Lets the user review and edit extracted events.
+4. Generates a downloadable semester schedule PDF with:
+   - Weekly recurring schedule grid
+   - Month-by-month calendar pages
+   - Chronological table of non-recurring events
 
-### How to run it on your own machine
+## Setup
 
-1. Install the requirements
+1. Install dependencies:
 
+   ```bash
+   pip install -r requirements.txt
    ```
-   $ pip install -r requirements.txt
+
+2. Add Streamlit secret in `.streamlit/secrets.toml`:
+
+   ```toml
+   ANTHROPIC_API_KEY = "your_api_key_here"
    ```
 
-2. Run the app
+3. Run the app:
 
-   ```
-   $ streamlit run streamlit_app.py
+   ```bash
+   streamlit run streamlit_app.py
    ```
