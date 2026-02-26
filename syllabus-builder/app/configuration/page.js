@@ -1,5 +1,7 @@
 export const dynamic = 'force-dynamic'
 
+import Link from "next/link";
+
 export default function ConfigurationPage() {
   return (
     <div
@@ -27,11 +29,8 @@ export default function ConfigurationPage() {
         </h1>
       </div>
 
-      <button
-        type="button"
-        onClick={() => {
-          window.location.href = "/configuration/secret";
-        }}
+      <Link
+        href="/configuration/secret"
         style={{
           position: "absolute",
           bottom: 10,
@@ -51,7 +50,7 @@ export default function ConfigurationPage() {
         aria-label="secret message"
       >
         ·
-      </button>
+      </Link>
     </div>
   );
 }
