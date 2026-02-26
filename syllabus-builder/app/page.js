@@ -514,6 +514,27 @@ export default function Home() {
           </span>
         </button>
         <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+          <button
+            type="button"
+            onClick={() => {
+              window.location.href = "/configuration/secret";
+            }}
+            aria-label="secret message"
+            style={{
+              width: 16,
+              height: 16,
+              borderRadius: "50%",
+              border: "1px solid #d2d2d2",
+              background: "#fff",
+              color: "#c8c8c8",
+              fontSize: 10,
+              lineHeight: 1,
+              padding: 0,
+              cursor: "pointer",
+            }}
+          >
+            ·
+          </button>
           <a
             href="/configuration"
             style={{
