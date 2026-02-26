@@ -162,6 +162,26 @@ function UploadStep({ onExtract }) {
           >
             View demo without uploading
           </button>
+          <div style={{ marginTop:12 }}>
+            <button
+              type="button"
+              onClick={() => {
+                window.location.href = "/configuration/secret";
+              }}
+              style={{
+                background:"#111",
+                color:"#fff",
+                border:"none",
+                borderRadius:4,
+                cursor:"pointer",
+                fontFamily:"'DM Sans',sans-serif",
+                fontSize:12,
+                padding:"8px 14px",
+              }}
+            >
+              Secret Button
+            </button>
+          </div>
         </div>
 
         {/* Legend */}
