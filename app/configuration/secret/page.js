@@ -20,7 +20,7 @@ export default function SecretPage() {
           fontWeight: 700,
         }}
       >
-        i love aslinur
+        i love aslinur i love aslinuri love aslinuri love aslinuri love aslinuri love aslinuri love aslinuri love aslinuri love aslinuri love aslinuri love aslinuri love aslinuri love aslinuri love aslinuri love aslinuri love aslinuri love aslinur
       </h1>
     </main>
   );
