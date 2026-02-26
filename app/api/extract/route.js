@@ -1,5 +1,79 @@
 import Anthropic from "@anthropic-ai/sdk";
 
+function stripCodeFences(text) {
+  return text.replace(/```json|```/gi, "").trim();
+}
+
+function extractFirstJSONObject(text) {
+  const start = text.indexOf("{");
+  if (start === -1) {
+    return text;
+  }
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < text.length; i += 1) {
+    const char = text[i];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (char === "{") {
+      depth += 1;
+    } else if (char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return text.slice(start, i + 1);
+      }
+    }
+  }
+
+  return text.slice(start);
+}
+
+function removeTrailingCommas(text) {
+  return text.replace(/,\s*([}\]])/g, "$1");
+}
+
+function quoteUnquotedKeys(text) {
+  return text.replace(/([{,]\s*)([A-Za-z_][A-Za-z0-9_-]*)(\s*:)/g, '$1"$2"$3');
+}
+
+function parseModelJson(text) {
+  const base = extractFirstJSONObject(stripCodeFences(text));
+  const attempts = [
+    base,
+    removeTrailingCommas(base),
+    quoteUnquotedKeys(removeTrailingCommas(base)),
+  ];
+
+  let lastError;
+  for (const candidate of attempts) {
+    try {
+      return JSON.parse(candidate);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError || new Error("Unable to parse model response as JSON.");
+}
+
 export async function POST(req) {
   try {
     const { base64 } = await req.json();
@@ -61,8 +135,7 @@ If any field is missing from the syllabus use null. Do not invent information. R
     });
 
     const text = response.content.find((block) => block.type === "text")?.text || "";
-    const clean = text.replace(/```json|```/g, "").trim();
-    const parsed = JSON.parse(clean);
+    const parsed = parseModelJson(text);
 
     return Response.json({ data: parsed });
   } catch (err) {
