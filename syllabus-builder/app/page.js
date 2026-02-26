@@ -514,6 +514,21 @@ export default function Home() {
           </span>
         </button>
         <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+          <a
+            href="/configuration"
+            style={{
+              textDecoration:"none",
+              background:"none",
+              border:"1px solid #e8e8e8",
+              borderRadius:4,
+              fontFamily:"'DM Sans',sans-serif",
+              fontSize:12,
+              color:"#888",
+              padding:"6px 14px",
+            }}
+          >
+            Configuration
+          </a>
           {step !== "upload" && (
             <button onClick={() => setStep("upload")} style={{ background:"none", border:"1px solid #e8e8e8", borderRadius:4, cursor:"pointer", fontFamily:"'DM Sans',sans-serif", fontSize:12, color:"#888", padding:"6px 14px" }}>
               ← New Upload

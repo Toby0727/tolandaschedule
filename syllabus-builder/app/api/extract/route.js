@@ -1,4 +1,46 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { createHash } from "node:crypto";
+
+const EXTRACTION_MODEL = process.env.ANTHROPIC_EXTRACT_MODEL || "claude-3-5-haiku-latest";
+const EXTRACTION_MAX_TOKENS = Number(process.env.ANTHROPIC_EXTRACT_MAX_TOKENS || 1600);
+const CACHE_TTL_MS = 15 * 60 * 1000;
+const CACHE_MAX_ITEMS = 20;
+const extractionCache = new Map();
+
+const EXTRACTION_PROMPT = `Extract all time-sensitive syllabus events and return only valid JSON.
+Schema:
+{"course_name":string|null,"instructor":string|null,"semester":string|null,"semester_start":"YYYY-MM-DD"|null,"semester_end":"YYYY-MM-DD"|null,"events":[{"id":integer,"category":"class"|"exam"|"office_hours"|"assignment"|"project"|"other","title":string|null,"date":"YYYY-MM-DD"|null,"recurring":boolean,"recurrence_rule":string|null,"time_start":"HH:MM"|null,"time_end":"HH:MM"|null,"location":string|null,"notes":string|null}]}
+Rules: use null when unknown; do not invent details; no markdown; no explanation; return one JSON object.`;
+
+function cacheKeyFromBase64(base64) {
+  return createHash("sha256").update(base64).digest("hex");
+}
+
+function getCachedExtraction(cacheKey) {
+  const cached = extractionCache.get(cacheKey);
+  if (!cached) {
+    return null;
+  }
+
+  if (Date.now() - cached.timestamp > CACHE_TTL_MS) {
+    extractionCache.delete(cacheKey);
+    return null;
+  }
+
+  return cached.data;
+}
+
+function setCachedExtraction(cacheKey, data) {
+  extractionCache.set(cacheKey, { data, timestamp: Date.now() });
+  if (extractionCache.size <= CACHE_MAX_ITEMS) {
+    return;
+  }
+
+  const oldestKey = extractionCache.keys().next().value;
+  if (oldestKey) {
+    extractionCache.delete(oldestKey);
+  }
+}
 
 function stripCodeFences(text) {
   return text.replace(/```json|```/gi, "").trim();
@@ -78,11 +120,25 @@ export async function POST(req) {
   try {
     const { base64 } = await req.json();
 
+    if (!base64) {
+      return Response.json({ error: "Missing PDF payload." }, { status: 400 });
+    }
+
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return Response.json({ error: "Missing ANTHROPIC_API_KEY." }, { status: 500 });
+    }
+
+    const cacheKey = cacheKeyFromBase64(base64);
+    const cachedData = getCachedExtraction(cacheKey);
+    if (cachedData) {
+      return Response.json({ data: cachedData, cached: true });
+    }
+
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     const response = await client.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 4000,
+      model: EXTRACTION_MODEL,
+      max_tokens: EXTRACTION_MAX_TOKENS,
       messages: [
         {
           role: "user",
@@ -97,29 +153,7 @@ export async function POST(req) {
             },
             {
               type: "text",
-              text: `You are an academic schedule extraction assistant. Extract ALL time-sensitive events from this syllabus and return ONLY valid JSON — no markdown, no backticks, no explanation. Use this exact schema:
-{
-  "course_name": string,
-  "instructor": string,
-  "semester": string,
-  "semester_start": "YYYY-MM-DD",
-  "semester_end": "YYYY-MM-DD",
-  "events": [
-    {
-      "id": integer,
-      "category": "class" | "exam" | "office_hours" | "assignment" | "project" | "other",
-      "title": string,
-      "date": "YYYY-MM-DD" or null if recurring,
-      "recurring": boolean,
-      "recurrence_rule": string or null,
-      "time_start": "HH:MM" or null,
-      "time_end": "HH:MM" or null,
-      "location": string or null,
-      "notes": string or null
-    }
-  ]
-}
-If any field is missing from the syllabus use null. Do not invent information. Return ONLY the JSON object.`,
+              text: EXTRACTION_PROMPT,
             },
           ],
         },
@@ -128,6 +162,7 @@ If any field is missing from the syllabus use null. Do not invent information. R
 
     const text = response.content.find((b) => b.type === "text")?.text || "";
     const parsed = parseModelJson(text);
+    setCachedExtraction(cacheKey, parsed);
 
     return Response.json({ data: parsed });
   } catch (err) {
